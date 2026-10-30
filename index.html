@@ -1,0 +1,2319 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biomimetic Aeroacoustics: Owl-Inspired Wind Turbine Simulation</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        };
+    </script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        /* Custom Scrollbar for Panels */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.2);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.4);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.7);
+        }
+        /* Glassmorphism panels */
+        .glass-panel {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+        }
+        .dark .glass-panel {
+            background-color: rgba(15, 23, 42, 0.82);
+            border-color: rgba(255, 255, 255, 0.12);
+            color: #f8fafc;
+        }
+        html:not(.dark) .glass-panel {
+            background-color: rgba(255, 255, 255, 0.85);
+            border-color: rgba(15, 23, 42, 0.12);
+            color: #0f172a;
+        }
+        /* Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 999px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #10b981;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -5px;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+            transition: transform 0.15s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+        .tooltip-box {
+            pointer-events: none;
+            transition: opacity 0.15s ease, transform 0.15s ease;
+            z-index: 60;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100">
+
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Active Blade Mode Floating Status Pill -->
+    <div class="fixed top-20 left-1/2 -translate-x-1/2 z-10 pointer-events-none flex items-center gap-2 px-4 py-1.5 rounded-full glass-panel border shadow-lg">
+        <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="status-mode-label" class="text-xs font-bold tracking-wide text-emerald-400 uppercase">Active: Owl Wing (Biomimetic Serrated & Fringed)</span>
+    </div>
+
+    <!-- 3D Hover Tooltip for Blade Features -->
+    <div id="blade-tooltip" class="tooltip-box fixed opacity-0 transform translate-y-2 max-w-xs p-3 rounded-xl glass-panel border shadow-2xl text-xs">
+        <div class="flex items-center gap-2 font-bold text-emerald-400 mb-1">
+            <i class="fa-solid fa-feather-pointed"></i>
+            <span id="tooltip-title">Feature Name</span>
+        </div>
+        <p id="tooltip-desc" class="leading-relaxed opacity-90">Description text goes here.</p>
+    </div>
+
+    <!-- Top Navigation & Status Bar -->
+    <header class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-2xl glass-panel border shadow-lg">
+        <!-- Brand & Title -->
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center text-white shadow-md">
+                <i class="fa-solid fa-wind text-lg"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-bold text-sm md:text-base tracking-tight">AeroOwl 3D</h1>
+                    <span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Biomimicry Lab</span>
+                </div>
+                <p class="text-[11px] opacity-70 hidden sm:block">Silent Flight Owl-Wing Aeroacoustics & Wake Turbulence Simulator</p>
+            </div>
+        </div>
+
+        <!-- Prominent Blade Design Mode Switcher + Camera Presets -->
+        <div class="flex items-center gap-1.5 flex-wrap">
+            <!-- Mode Switch Pill -->
+            <div class="flex items-center p-1 rounded-xl bg-slate-900/60 border border-slate-500/30 mr-1">
+                <button id="top-btn-normal" onclick="setTurbineMode(false)" class="px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-fan"></i>
+                    <span>Normal Wing</span>
+                </button>
+                <button id="top-btn-owl" onclick="setTurbineMode(true)" class="px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-emerald-500 text-slate-950 shadow">
+                    <i class="fa-solid fa-feather-pointed"></i>
+                    <span>Owl Wing</span>
+                </button>
+            </div>
+
+            <div class="h-4 w-[1px] bg-slate-500/30 mx-1 hidden md:block"></div>
+
+            <span class="text-[11px] font-medium opacity-60 mr-1 hidden xl:inline"><i class="fa-solid fa-video mr-1"></i>Camera:</span>
+            <button onclick="setCameraPreset('front')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-500/10 hover:bg-emerald-500/20 hover:text-emerald-400 border border-slate-500/20 transition" title="Front View">Front</button>
+            <button onclick="setCameraPreset('side')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-500/10 hover:bg-emerald-500/20 hover:text-emerald-400 border border-slate-500/20 transition" title="Side Wake Profile">Side</button>
+            <button onclick="setCameraPreset('closeup')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30 transition" title="Inspect Blade Edge Features">
+                <i class="fa-solid fa-magnifying-glass-plus mr-1"></i>Blade Close-up
+            </button>
+            <button onclick="setCameraPreset('top')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-500/10 hover:bg-emerald-500/20 hover:text-emerald-400 border border-slate-500/20 transition" title="Top Down Wake View">Top</button>
+        </div>
+
+        <!-- Right Quick Actions: How it Works, Day/Night, UI Theme -->
+        <div class="flex items-center gap-2">
+            <button onclick="toggleModal('how-it-works-modal')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition flex items-center gap-1.5">
+                <i class="fa-solid fa-book-open"></i>
+                <span class="hidden sm:inline">How It Works</span>
+            </button>
+
+            <button id="btn-daynight" onclick="toggleDayNight()" class="p-2 rounded-lg text-xs bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/20 transition" title="Toggle 3D Sky Day/Night">
+                <i id="icon-daynight" class="fa-solid fa-sun text-amber-400"></i>
+            </button>
+
+            <button id="btn-theme" onclick="toggleUITheme()" class="p-2 rounded-lg text-xs bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/20 transition" title="Toggle Dark/Light UI Theme">
+                <i id="icon-theme" class="fa-solid fa-moon text-sky-400"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Floating Restore Tab for Left Controls Panel (Shown when minimized) -->
+    <button id="restore-left-btn" onclick="toggleLeftPanel()" class="fixed top-24 left-3 z-20 hidden items-center gap-2 px-3.5 py-2.5 rounded-xl glass-panel border shadow-xl hover:border-emerald-500/50 transition group">
+        <i class="fa-solid fa-sliders text-emerald-400 group-hover:scale-110 transition"></i>
+        <span class="text-xs font-semibold">Show Controls</span>
+        <i class="fa-solid fa-chevron-right text-[10px] opacity-60"></i>
+    </button>
+
+    <!-- LEFT PANEL: Interactive Simulation & Biomimetic Controls -->
+    <aside id="left-panel" class="fixed top-20 left-3 bottom-3 w-80 max-w-[90vw] z-20 rounded-2xl glass-panel border shadow-xl flex flex-col overflow-hidden transition-transform duration-300">
+        <!-- Panel Header -->
+        <div class="px-4 py-3 border-b border-slate-500/20 flex items-center justify-between">
+            <div class="flex items-center gap-2 font-semibold text-xs uppercase tracking-wider text-emerald-400">
+                <i class="fa-solid fa-sliders"></i>
+                <span>Aero & Biomimetic Controls</span>
+            </div>
+            <button onclick="toggleLeftPanel()" class="px-2 py-1 rounded-lg bg-slate-500/10 hover:bg-slate-500/25 text-xs opacity-80 hover:opacity-100 transition flex items-center gap-1" title="Minimize Controls Panel">
+                <i class="fa-solid fa-minus"></i>
+                <span class="text-[10px]">Hide</span>
+            </button>
+        </div>
+
+        <!-- Scrollable Controls Content -->
+        <div class="p-4 overflow-y-auto space-y-5 flex-1 text-xs">
+            
+            <!-- Playback & Time Controls -->
+            <div class="flex items-center gap-2">
+                <button id="btn-playpause" onclick="togglePlayPause()" class="flex-1 py-2 px-3 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow flex items-center justify-center gap-1.5 transition">
+                    <i id="icon-playpause" class="fa-solid fa-pause"></i>
+                    <span id="text-playpause">Pause</span>
+                </button>
+                <button id="btn-slowmo" onclick="toggleSlowMo()" class="py-2 px-3 rounded-xl font-medium bg-slate-500/15 hover:bg-slate-500/25 border border-slate-500/30 transition flex items-center gap-1.5" title="Slow Motion (0.25x)">
+                    <i class="fa-solid fa-gauge-simple-low"></i>
+                    <span>Slow-Mo</span>
+                </button>
+                <button onclick="resetSimulation()" class="py-2 px-3 rounded-xl font-medium bg-slate-500/15 hover:bg-rose-500/20 hover:text-rose-400 border border-slate-500/30 transition" title="Reset All Parameters">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+            </div>
+
+            <!-- Blade Design Mode Toggle inside Control Panel -->
+            <div class="p-3 rounded-xl bg-slate-500/10 border border-slate-500/20 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="font-semibold text-[11px] uppercase tracking-wider opacity-80">
+                        <i class="fa-solid fa-shuffle mr-1.5 text-emerald-400"></i>Active Blade Design
+                    </span>
+                    <span id="side-mode-badge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Owl Wing</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button id="side-btn-normal" onclick="setTurbineMode(false)" class="py-2 px-2 rounded-lg text-xs font-medium border border-slate-500/30 bg-slate-500/10 opacity-75 transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-fan"></i>
+                        <span>Normal Wing</span>
+                    </button>
+                    <button id="side-btn-owl" onclick="setTurbineMode(true)" class="py-2 px-2 rounded-lg text-xs font-semibold border border-emerald-500 bg-emerald-500/20 text-emerald-300 transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-feather-pointed"></i>
+                        <span>Owl Wing</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Wind & Rotor Section -->
+            <div class="space-y-3 p-3 rounded-xl bg-slate-500/10 border border-slate-500/15">
+                <div class="font-semibold text-[11px] uppercase tracking-wider opacity-75 flex items-center justify-between">
+                    <span><i class="fa-solid fa-wind mr-1.5 text-sky-400"></i>Wind & Rotor Config</span>
+                    <span id="rpm-readout" class="font-mono text-sky-400">14.2 RPM</span>
+                </div>
+
+                <!-- Wind Speed Slider -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="opacity-80">Wind Speed</span>
+                        <span class="font-mono font-semibold text-emerald-400"><span id="val-wind">12.0</span> m/s</span>
+                    </div>
+                    <input type="range" id="slider-wind" min="0" max="25" step="0.5" value="12" oninput="updateParameters()">
+                    <div class="flex justify-between text-[10px] opacity-50 mt-0.5">
+                        <span>0 m/s (Calm)</span>
+                        <span>12 m/s (Rated)</span>
+                        <span>25 m/s (Gale)</span>
+                    </div>
+                </div>
+
+                <!-- Blade Count Selector -->
+                <div class="pt-1">
+                    <span class="block opacity-80 mb-1.5">Rotor Blade Count</span>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <button onclick="setBladeCount(2)" id="blade-btn-2" class="py-1.5 rounded-lg border border-slate-500/30 bg-slate-500/10 font-medium transition">2 Blades</button>
+                        <button onclick="setBladeCount(3)" id="blade-btn-3" class="py-1.5 rounded-lg border border-emerald-500 bg-emerald-500/20 text-emerald-400 font-semibold transition">3 Blades</button>
+                        <button onclick="setBladeCount(4)" id="blade-btn-4" class="py-1.5 rounded-lg border border-slate-500/30 bg-slate-500/10 font-medium transition">4 Blades</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Owl Biomimicry Sliders -->
+            <div id="owl-sliders-box" class="space-y-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/25 transition-opacity duration-300">
+                <div class="flex items-center justify-between">
+                    <span class="font-semibold text-[11px] uppercase tracking-wider text-emerald-400">
+                        <i class="fa-solid fa-feather mr-1.5"></i>Owl Wing Features
+                    </span>
+                    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300" id="owl-score-badge">92% Bio-Opt</span>
+                </div>
+
+                <!-- 1. Leading-Edge Serration Depth -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="opacity-85">1. Leading-Edge Comb Depth</span>
+                        <span class="font-mono font-semibold text-emerald-400"><span id="val-serr-depth">75</span>%</span>
+                    </div>
+                    <input type="range" id="slider-serr-depth" min="0" max="100" step="1" value="75" oninput="updateParameters(true)">
+                    <p class="text-[10px] opacity-60 mt-0.5">Breaks incoming laminar boundary layer into stable micro-vortices.</p>
+                </div>
+
+                <!-- 2. Leading-Edge Serration Count -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="opacity-85">2. Serration Tooth Density</span>
+                        <span class="font-mono font-semibold text-emerald-400"><span id="val-serr-count">18</span> teeth</span>
+                    </div>
+                    <input type="range" id="slider-serr-count" min="4" max="30" step="2" value="18" oninput="updateParameters(true)">
+                </div>
+
+                <!-- 3. Trailing-Edge Fringe Length -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="opacity-85">3. Trailing-Edge Fringe Length</span>
+                        <span class="font-mono font-semibold text-emerald-400"><span id="val-fringe">80</span>%</span>
+                    </div>
+                    <input type="range" id="slider-fringe" min="0" max="100" step="1" value="80" oninput="updateParameters(true)">
+                    <p class="text-[10px] opacity-60 mt-0.5">Porous compliant fringe eliminates sharp trailing-edge scattering noise.</p>
+                </div>
+
+                <!-- 4. Velvety Surface Micro-Texture Toggle -->
+                <div class="flex items-center justify-between pt-1">
+                    <div>
+                        <span class="block font-medium">4. Velvety Upper Surface Down</span>
+                        <span class="text-[10px] opacity-60">Dampens high-freq pressure fluctuations</span>
+                    </div>
+                    <input type="checkbox" id="chk-velvet" checked onchange="updateParameters(false)" class="w-4 h-4 accent-emerald-500 rounded cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Flow & Wake Visualization Toggles -->
+            <div class="space-y-2 p-3 rounded-xl bg-slate-500/10 border border-slate-500/15">
+                <div class="font-semibold text-[11px] uppercase tracking-wider opacity-75 mb-1">
+                    <i class="fa-solid fa-eye mr-1.5 text-cyan-400"></i>Flow Visualization Layers
+                </div>
+
+                <label class="flex items-center justify-between cursor-pointer py-1">
+                    <span class="opacity-85">Particle Wind Streamlines</span>
+                    <input type="checkbox" id="chk-streamlines" checked onchange="updateVisToggles()" class="w-4 h-4 accent-emerald-500 rounded">
+                </label>
+
+                <label class="flex items-center justify-between cursor-pointer py-1">
+                    <span class="opacity-85">Helical Wake Vortex Rings</span>
+                    <input type="checkbox" id="chk-vortices" checked onchange="updateVisToggles()" class="w-4 h-4 accent-emerald-500 rounded">
+                </label>
+
+                <!-- Color Legend -->
+                <div class="pt-2 border-t border-slate-500/20">
+                    <div class="flex justify-between text-[10px] opacity-75 mb-1">
+                        <span>Laminar (Smooth)</span>
+                        <span>Moderate</span>
+                        <span>Chaotic (Turbulent)</span>
+                    </div>
+                    <div class="h-2 w-full rounded-full bg-gradient-to-r from-sky-400 via-amber-400 to-rose-500"></div>
+                </div>
+            </div>
+
+            <!-- Web Audio API Sound Synthesizer -->
+            <div class="space-y-2.5 p-3 rounded-xl bg-slate-500/10 border border-slate-500/15">
+                <div class="flex items-center justify-between">
+                    <span class="font-semibold text-[11px] uppercase tracking-wider text-amber-400">
+                        <i class="fa-solid fa-volume-high mr-1.5"></i>Aeroacoustic Audio Synth
+                    </span>
+                    <button id="btn-sound" onclick="toggleAudioMode()" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-500/20 hover:bg-amber-500/20 border border-slate-500/30 transition">
+                        <i id="icon-sound" class="fa-solid fa-volume-xmark mr-1"></i>Off
+                    </button>
+                </div>
+
+                <div class="text-[10px] opacity-75 flex items-center justify-between">
+                    <span>Active Sound Profile:</span>
+                    <span id="audio-profile-label" class="font-semibold text-emerald-400">Owl Wing (Soft Whoosh)</span>
+                </div>
+
+                <!-- Volume & Mute -->
+                <div class="flex items-center gap-2 pt-1">
+                    <button onclick="toggleMute()" class="p-1.5 rounded bg-slate-500/15 hover:bg-slate-500/25 text-xs" title="Mute / Unmute">
+                        <i id="icon-mute" class="fa-solid fa-volume-low"></i>
+                    </button>
+                    <input type="range" id="slider-volume" min="0" max="100" value="60" oninput="updateAudioVolume()">
+                    <span id="val-volume" class="font-mono text-[10px] w-8 text-right">60%</span>
+                </div>
+            </div>
+
+            <!-- 2D Interactive Airfoil Cross-Section Analyzer -->
+            <div class="space-y-2 p-3 rounded-xl bg-slate-500/10 border border-slate-500/15">
+                <div class="flex items-center justify-between">
+                    <span class="font-semibold text-[11px] uppercase tracking-wider text-purple-400">
+                        <i class="fa-solid fa-layer-group mr-1.5"></i>2D Airfoil Cross-Section
+                    </span>
+                    <span class="text-[10px] opacity-60">Boundary Layer View</span>
+                </div>
+                <canvas id="airfoil-canvas" width="260" height="135" class="w-full rounded-lg bg-slate-900/90 border border-slate-700/50"></canvas>
+                <p class="text-[10px] opacity-70 leading-tight">
+                    Real-time cross-section of the active blade showing how leading-edge serrations and trailing-edge fringes prevent boundary-layer separation.
+                </p>
+            </div>
+
+        </div>
+    </aside>
+
+    <!-- Floating Restore Tab for Right Telemetry Panel (Shown when minimized) -->
+    <button id="restore-right-btn" onclick="toggleRightPanel()" class="fixed top-24 right-3 z-20 hidden items-center gap-2 px-3.5 py-2.5 rounded-xl glass-panel border shadow-xl hover:border-sky-500/50 transition group">
+        <i class="fa-solid fa-chevron-left text-[10px] opacity-60"></i>
+        <span class="text-xs font-semibold">Show Telemetry</span>
+        <i class="fa-solid fa-chart-line text-sky-400 group-hover:scale-110 transition"></i>
+    </button>
+
+    <!-- RIGHT PANEL: Live Telemetry, Energy Output & Real-Time Graphs -->
+    <aside id="right-panel" class="fixed top-20 right-3 bottom-3 w-96 max-w-[92vw] z-20 rounded-2xl glass-panel border shadow-xl flex flex-col overflow-hidden transition-transform duration-300">
+        <!-- Panel Header -->
+        <div class="px-4 py-3 border-b border-slate-500/20 flex items-center justify-between">
+            <div class="flex items-center gap-2 font-semibold text-xs uppercase tracking-wider text-sky-400">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>Live Aeroacoustic Telemetry</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button onclick="exportGraphsPNG()" class="px-2 py-1 rounded-lg text-[11px] font-medium bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 transition flex items-center gap-1" title="Export Telemetry Report as PNG">
+                    <i class="fa-solid fa-download"></i>
+                    <span>Export PNG</span>
+                </button>
+                <button onclick="toggleRightPanel()" class="px-2 py-1 rounded-lg bg-slate-500/10 hover:bg-slate-500/25 text-xs opacity-80 hover:opacity-100 transition flex items-center gap-1" title="Minimize Telemetry Panel">
+                    <i class="fa-solid fa-minus"></i>
+                    <span class="text-[10px]">Hide</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Scrollable Telemetry Content -->
+        <div class="p-3.5 overflow-y-auto space-y-3.5 flex-1 text-xs">
+            
+            <!-- Legend Pill -->
+            <div class="flex items-center justify-around py-1.5 px-2 rounded-lg bg-slate-500/10 border border-slate-500/15 text-[11px]">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 rounded-sm bg-rose-500 inline-block"></span>
+                    <span class="font-medium">Normal Wing (Baseline)</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 rounded-sm bg-emerald-500 inline-block"></span>
+                    <span class="font-medium">Owl Wing (Biomimetic)</span>
+                </div>
+            </div>
+
+            <!-- Live KPI Cards: Noise Reduction, Turbulence Reduction, Power Output -->
+            <div class="grid grid-cols-3 gap-2">
+                <!-- Noise Reduction KPI -->
+                <div class="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between">
+                    <span class="text-[10px] uppercase opacity-75 font-semibold">Owl Noise Red.</span>
+                    <div class="my-1">
+                        <span id="kpi-db-diff" class="text-base font-bold text-emerald-400 font-mono">-6.8 dB</span>
+                    </div>
+                    <span id="kpi-acoustic-energy" class="text-[10px] text-emerald-300/90 font-medium">-79% Acoustic Pwr</span>
+                </div>
+
+                <!-- Turbulence Reduction KPI -->
+                <div class="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/25 flex flex-col justify-between">
+                    <span class="text-[10px] uppercase opacity-75 font-semibold">Wake Turb.</span>
+                    <div class="my-1">
+                        <span id="kpi-turb-diff" class="text-base font-bold text-cyan-400 font-mono">-38.4%</span>
+                    </div>
+                    <span id="kpi-active-turb" class="text-[10px] text-cyan-300/90 font-medium">Active: 14.8%</span>
+                </div>
+
+                <!-- Electrical Power Output Trade-Off -->
+                <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex flex-col justify-between">
+                    <span class="text-[10px] uppercase opacity-75 font-semibold">Power Output</span>
+                    <div class="my-0.5 text-[11px] font-mono">
+                        <div class="flex justify-between"><span class="text-rose-400">Norm:</span><span id="kpi-kw-a" class="font-bold">1420 kW</span></div>
+                        <div class="flex justify-between"><span class="text-emerald-400">Owl:</span><span id="kpi-kw-b" class="font-bold">1405 kW</span></div>
+                    </div>
+                    <span id="kpi-kw-tradeoff" class="text-[10px] text-amber-300/90 font-medium">-1.1% Aero Tradeoff</span>
+                </div>
+            </div>
+
+            <!-- Graph 1: Noise Level (dB) vs Wind Speed (m/s) -->
+            <div class="p-2.5 rounded-xl bg-slate-500/10 border border-slate-500/15">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="font-semibold text-[11px]">1. Noise Level (dB) vs. Wind Speed</span>
+                    <span id="readout-db-live" class="font-mono text-[10px] text-emerald-400">Active: 95.6 dB</span>
+                </div>
+                <div class="h-36 w-full relative">
+                    <canvas id="chart-noise-wind"></canvas>
+                </div>
+            </div>
+
+            <!-- Graph 2: Wake Turbulence Intensity (%) vs Time -->
+            <div class="p-2.5 rounded-xl bg-slate-500/10 border border-slate-500/15">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="font-semibold text-[11px]">2. Wake Turbulence Intensity (%) vs. Time</span>
+                    <span id="readout-turb-live" class="font-mono text-[10px] text-cyan-400">Norm: 24.1% | Owl: 14.8%</span>
+                </div>
+                <div class="h-32 w-full relative">
+                    <canvas id="chart-turb-time"></canvas>
+                </div>
+            </div>
+
+            <!-- Graph 3: 1/3 Octave Frequency Spectrum (Hz vs dB) -->
+            <div class="p-2.5 rounded-xl bg-slate-500/10 border border-slate-500/15">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="font-semibold text-[11px]">3. Broadband Frequency Spectrum (Hz vs. dB)</span>
+                    <span class="text-[10px] opacity-60">Mid/High Freq Suppression</span>
+                </div>
+                <div class="h-36 w-full relative">
+                    <canvas id="chart-spectrum"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </aside>
+
+    <!-- Collapsible "How It Works" Educational Modal -->
+    <div id="how-it-works-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+        <div class="max-w-2xl w-full rounded-2xl glass-panel border shadow-2xl overflow-hidden animate-fade-in">
+            <div class="px-6 py-4 border-b border-slate-500/20 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                        <i class="fa-solid fa-feather-pointed"></i>
+                    </div>
+                    <h2 class="font-bold text-base">How Owl-Inspired Wind Turbines Work</h2>
+                </div>
+                <button onclick="toggleModal('how-it-works-modal')" class="p-1.5 rounded-lg hover:bg-slate-500/20 transition">
+                    <i class="fa-solid fa-xmark text-base"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-4 text-xs leading-relaxed max-h-[75vh] overflow-y-auto">
+                <p class="text-sm opacity-90">
+                    Barn owls (<em>Tyto alba</em>) hunt in near-total silence. Wind turbine blades, by contrast, generate significant aerodynamic whooshing noise as their tips slice through the air at speeds over 70 m/s. By translating three biological owl-wing structures onto turbine blades, engineers can dramatically cut noise and wake turbulence:
+                </p>
+
+                <div class="grid md:grid-cols-3 gap-3 pt-2">
+                    <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+                        <div class="font-bold text-emerald-400 mb-1 flex items-center gap-1.5">
+                            <i class="fa-solid fa-grip-lines-vertical"></i>
+                            <span>1. Leading-Edge Comb</span>
+                        </div>
+                        <p class="opacity-85">
+                            Comb-like serrations along the front edge act as micro-vortex generators. They break up turbulent incoming gusts into tiny, organized streamwise vortices that keep airflow smoothly attached to the blade curve.
+                        </p>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/25">
+                        <div class="font-bold text-cyan-400 mb-1 flex items-center gap-1.5">
+                            <i class="fa-solid fa-water"></i>
+                            <span>2. Trailing-Edge Fringe</span>
+                        </div>
+                        <p class="opacity-85">
+                            On a standard blade, high-pressure air from below and low-pressure air from above slam together at the sharp rear edge, creating loud scattering noise. Flexible sawtooth fringes allow gradual pressure mixing, cutting noise by 3–10 dB.
+                        </p>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/25">
+                        <div class="font-bold text-purple-400 mb-1 flex items-center gap-1.5">
+                            <i class="fa-solid fa-braille"></i>
+                            <span>3. Velvety Surface</span>
+                        </div>
+                        <p class="opacity-85">
+                            A soft micro-textured upper coating acts like an acoustic carpet. It absorbs wall-pressure fluctuations in the turbulent boundary layer, suppressing annoying high-frequency hiss (1 kHz – 8 kHz).
+                        </p>
+                    </div>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-1">
+                    <div class="font-bold text-amber-400"><i class="fa-solid fa-bolt mr-1.5"></i>Why Does This Matter for Clean Energy?</div>
+                    <p class="opacity-85">
+                        Noise regulations often force wind farms to curtail (slow down) turbines at night or build further from communities. A 6 dB reduction represents a <strong>75% drop in acoustic energy</strong>, allowing turbines to spin at optimal speed 24/7 while weaker wake turbulence lets downstream turbines capture more wind!
+                    </p>
+                </div>
+            </div>
+            <div class="px-6 py-3 border-t border-slate-500/20 flex justify-end">
+                <button onclick="toggleModal('how-it-works-modal')" class="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition">
+                    Got It, Back to Simulation
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**************************************************************************
+         * 1. SIMULATION CONSTANTS & STATE CONFIGURATION
+         **************************************************************************/
+        const CONFIG = {
+            TOWER_HEIGHT: 24,
+            BLADE_LENGTH: 11.5,
+            BLADE_CHORD_ROOT: 1.45,
+            BLADE_CHORD_TIP: 0.45,
+            PARTICLE_COUNT: 320,
+            VORTEX_RINGS: 16,
+            STREAM_Z_START: 24,         // Upwind spawn Z
+            STREAM_Z_END: -38,          // Downwind despawn Z
+            RATED_POWER_KW: 2200,       // Max generator rating
+            CUT_IN_SPEED: 3.0
+        };
+
+        const state = {
+            isOwlMode: true,            // true = Owl Wing (Biomimetic), false = Normal Wing (Smooth)
+            windSpeed: 12.0,            // m/s (0 to 25)
+            bladeCount: 3,              // 2, 3, or 4
+            serrationDepth: 75,         // % (0 to 100)
+            serrationCount: 18,         // 4 to 30
+            fringeLength: 80,           // % (0 to 100)
+            velvetSurface: true,
+            isPlaying: true,
+            isSlowMo: false,
+            isDay: true,
+            darkUI: true,
+            showStreamlines: true,
+            showVortices: true,
+            showHeatmap: false,
+            leftMinimized: false,
+            rightMinimized: false,
+            // Audio state
+            audioEnabled: false,
+            audioMuted: false,
+            audioVolume: 0.6,
+            // Computed physics outputs
+            rpm: 14.2,
+            noiseA: 102.4,
+            noiseB: 95.6,
+            turbA: 24.0,
+            turbB: 14.8,
+            powerA: 1420,
+            powerB: 1405,
+            rotorAngle: 0
+        };
+
+        /**************************************************************************
+         * 2. THREE.JS SCENE, CAMERAS, LIGHTS & ENVIRONMENT
+         **************************************************************************/
+        let scene, renderer, mainCamera, controls;
+        let dirLight, hemiLight, ambientLight, skyMesh, groundMesh;
+        let turbineGroup, rotorHub, baseRingMesh, beaconMesh, noseConeMesh;
+        let particleSystem;
+        let vortexGroup;
+        let heatmapMesh, heatmapCtx, heatmapTex;
+        const interactiveMeshes = [];
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function initThreeScene() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+
+            // Main Perspective Camera centered on the single turbine
+            mainCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 400);
+            mainCamera.position.set(0, 22, 44);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // OrbitControls centered on the single turbine
+            controls = new THREE.OrbitControls(mainCamera, renderer.domElement);
+            controls.target.set(0, 20, 0);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.06;
+            controls.maxPolarAngle = Math.PI / 2 - 0.02; // Prevent camera going underground
+            controls.minDistance = 4;
+            controls.maxDistance = 140;
+
+            // Lighting
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+            scene.add(ambientLight);
+
+            hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3b4d3b, 0.55);
+            hemiLight.position.set(0, 60, 0);
+            scene.add(hemiLight);
+
+            dirLight = new THREE.DirectionalLight(0xfffbeb, 1.15);
+            dirLight.position.set(35, 55, 35);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 10;
+            dirLight.shadow.camera.far = 150;
+            const d = 35;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            dirLight.shadow.bias = -0.0005;
+            scene.add(dirLight);
+
+            createEnvironment();
+            createTurbines();
+            createAirflowParticles();
+            createVortexRings();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('mousemove', onPointerMove);
+        }
+
+        function createEnvironment() {
+            // Sky Dome with Procedural Gradient Shader
+            const skyGeo = new THREE.SphereGeometry(220, 32, 24);
+            const skyMat = new THREE.ShaderMaterial({
+                uniforms: {
+                    topColor: { value: new THREE.Color(0x0284c7) },
+                    bottomColor: { value: new THREE.Color(0xe0f2fe) },
+                    offset: { value: 15 },
+                    exponent: { value: 0.65 }
+                },
+                vertexShader: `
+                    varying vec3 vWorldPosition;
+                    void main() {
+                        vec4 worldPosition = modelMatrix * vec4( position, 1.0 );
+                        vWorldPosition = worldPosition.xyz;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 topColor;
+                    uniform vec3 bottomColor;
+                    uniform float offset;
+                    uniform float exponent;
+                    varying vec3 vWorldPosition;
+                    void main() {
+                        float h = normalize( vWorldPosition + offset ).y;
+                        gl_FragColor = vec4( mix( bottomColor, topColor, max( pow( max( h, 0.0 ), exponent ), 0.0 ) ), 1.0 );
+                    }
+                `,
+                side: THREE.BackSide
+            });
+            skyMesh = new THREE.Mesh(skyGeo, skyMat);
+            scene.add(skyMesh);
+
+            // Ground Plane with subtle aerodynamic coordinate grid
+            const groundGeo = new THREE.CircleGeometry(180, 64);
+            const groundMat = new THREE.MeshStandardMaterial({
+                color: 0x1e293b,
+                roughness: 0.9,
+                metalness: 0.05
+            });
+            groundMesh = new THREE.Mesh(groundGeo, groundMat);
+            groundMesh.rotation.x = -Math.PI / 2;
+            groundMesh.receiveShadow = true;
+            scene.add(groundMesh);
+
+            const grid = new THREE.GridHelper(160, 40, 0x38bdf8, 0x334155);
+            grid.position.y = 0.04;
+            grid.material.opacity = 0.25;
+            grid.material.transparent = true;
+            scene.add(grid);
+
+            updateDayNightVisuals();
+        }
+
+        /**************************************************************************
+         * 3. PROCEDURAL TURBINE & OWL-WING BLADE GEOMETRY BUILDER
+         **************************************************************************/
+        function createTurbines() {
+            // Single Central Turbine at X = 0
+            turbineGroup = buildTurbineStructure(0, state.isOwlMode);
+            scene.add(turbineGroup);
+
+            rebuildRotorBlades();
+        }
+
+        function buildTurbineStructure(posX, isOwl) {
+            const group = new THREE.Group();
+            group.position.set(posX, 0, 0);
+
+            const towerMat = new THREE.MeshStandardMaterial({
+                color: 0xf1f5f9,
+                roughness: 0.35,
+                metalness: 0.2
+            });
+
+            // Tapered Tubular Steel Tower
+            const towerGeo = new THREE.CylinderGeometry(0.65, 1.35, CONFIG.TOWER_HEIGHT, 28);
+            const towerMesh = new THREE.Mesh(towerGeo, towerMat);
+            towerMesh.position.y = CONFIG.TOWER_HEIGHT / 2;
+            towerMesh.castShadow = true;
+            towerMesh.receiveShadow = true;
+            group.add(towerMesh);
+
+            // Concrete Foundation Pad
+            const baseGeo = new THREE.CylinderGeometry(2.6, 3.0, 0.7, 24);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.8 });
+            const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+            baseMesh.position.y = 0.35;
+            baseMesh.receiveShadow = true;
+            group.add(baseMesh);
+
+            // Base Ring Accent (Emerald for Owl Wing, Rose for Normal Wing)
+            const ringGeo = new THREE.TorusGeometry(2.2, 0.12, 12, 36);
+            const ringMat = new THREE.MeshBasicMaterial({ color: isOwl ? 0x10b981 : 0xf43f5e });
+            baseRingMesh = new THREE.Mesh(ringGeo, ringMat);
+            baseRingMesh.rotation.x = Math.PI / 2;
+            baseRingMesh.position.y = 0.72;
+            group.add(baseRingMesh);
+
+            // Nacelle Housing
+            const nacelleGeo = new THREE.BoxGeometry(2.1, 2.2, 4.8);
+            const nacelleMesh = new THREE.Mesh(nacelleGeo, towerMat);
+            nacelleMesh.position.set(0, CONFIG.TOWER_HEIGHT + 0.6, -0.8);
+            nacelleMesh.castShadow = true;
+            nacelleMesh.receiveShadow = true;
+            group.add(nacelleMesh);
+
+            // Status Beacon Light on Nacelle Roof
+            const beaconGeo = new THREE.SphereGeometry(0.22, 12, 12);
+            const beaconMat = new THREE.MeshBasicMaterial({ color: isOwl ? 0x10b981 : 0xf43f5e });
+            beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
+            beaconMesh.position.set(0, CONFIG.TOWER_HEIGHT + 1.8, -2.5);
+            group.add(beaconMesh);
+
+            // Rotating Rotor Hub Group
+            rotorHub = new THREE.Group();
+            rotorHub.position.set(0, CONFIG.TOWER_HEIGHT + 0.6, 1.8);
+            group.add(rotorHub);
+
+            // Aerodynamic Nose Cone (Spinner)
+            const noseGeo = new THREE.ConeGeometry(1.05, 2.4, 28);
+            const noseMat = new THREE.MeshStandardMaterial({
+                color: isOwl ? 0x10b981 : 0xf43f5e,
+                roughness: 0.3,
+                metalness: 0.15
+            });
+            noseConeMesh = new THREE.Mesh(noseGeo, noseMat);
+            noseConeMesh.rotation.x = Math.PI / 2;
+            noseConeMesh.position.z = 0.8;
+            noseConeMesh.castShadow = true;
+            rotorHub.add(noseConeMesh);
+
+            return group;
+        }
+
+        /**
+         * Procedurally builds custom 3D blades for the single central turbine
+         * based on whether Owl Wing mode or Normal Wing mode is active.
+         */
+        function rebuildRotorBlades() {
+            interactiveMeshes.length = 0;
+            while (rotorHub.children.length > 1) {
+                const child = rotorHub.children.pop();
+                child.traverse(obj => { if (obj.geometry) obj.geometry.dispose(); });
+            }
+
+            // Update accent colors on tower ring, beacon, and nose cone
+            const accentHex = state.isOwlMode ? 0x10b981 : 0xf43f5e;
+            if (baseRingMesh) baseRingMesh.material.color.setHex(accentHex);
+            if (beaconMesh) beaconMesh.material.color.setHex(accentHex);
+            if (noseConeMesh) noseConeMesh.material.color.setHex(state.isOwlMode ? 0x10b981 : 0xe2e8f0);
+
+            const count = state.bladeCount;
+            for (let i = 0; i < count; i++) {
+                const angle = (i * 2 * Math.PI) / count;
+                const blade = createSingleBladeGroup(state.isOwlMode);
+                blade.rotation.z = angle;
+                rotorHub.add(blade);
+            }
+        }
+
+        function createSingleBladeGroup(isOwl) {
+            const bladeRoot = new THREE.Group();
+
+            // 1. Cylindrical Pitch Root Connector
+            const rootGeo = new THREE.CylinderGeometry(0.32, 0.38, 1.6, 16);
+            const rootMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.5 });
+            const rootMesh = new THREE.Mesh(rootGeo, rootMat);
+            rootMesh.position.y = 0.9;
+            bladeRoot.add(rootMesh);
+
+            // 2. Custom Twisted Airfoil Main Spar Body
+            const spanSegments = 36;
+            const L = CONFIG.BLADE_LENGTH;
+            const airfoilGeo = buildTwistedAirfoilGeometry(L, spanSegments);
+
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: isOwl ? (state.velvetSurface ? 0xd1fae5 : 0xf8fafc) : 0xf8fafc,
+                roughness: isOwl && state.velvetSurface ? 0.88 : 0.25, // Velvety matte texture vs glossy smooth
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+
+            const mainBladeMesh = new THREE.Mesh(airfoilGeo, bodyMat);
+            mainBladeMesh.position.y = 1.4;
+            mainBladeMesh.castShadow = true;
+            mainBladeMesh.receiveShadow = true;
+
+            if (isOwl) {
+                mainBladeMesh.userData = {
+                    tooltipTitle: "3. Velvety Upper-Surface Texture",
+                    tooltipDesc: "Inspired by the soft down feathers on an owl's upper wing, this micro-textured matte surface absorbs turbulent boundary-layer pressure fluctuations and dampens high-frequency noise (1–8 kHz)."
+                };
+                interactiveMeshes.push(mainBladeMesh);
+            } else {
+                mainBladeMesh.userData = {
+                    tooltipTitle: "Conventional Smooth Fiberglass Blade",
+                    tooltipDesc: "High-gloss rigid surface experiences abrupt laminar-to-turbulent flow separation and strong trailing-edge vortex shedding noise."
+                };
+                interactiveMeshes.push(mainBladeMesh);
+            }
+            bladeRoot.add(mainBladeMesh);
+
+            // 3. Add Owl Leading-Edge Comb Serrations & Trailing-Edge Fringe to Turbine B
+            if (isOwl) {
+                // Leading-Edge Comb Serrations (+X side of blade chord)
+                if (state.serrationDepth > 0) {
+                    const serrGeo = buildSerrationCombGeometry(
+                        L,
+                        state.serrationCount,
+                        (state.serrationDepth / 100) * 0.52
+                    );
+                    const serrMat = new THREE.MeshStandardMaterial({
+                        color: 0x10b981,
+                        roughness: 0.35,
+                        metalness: 0.2,
+                        side: THREE.DoubleSide
+                    });
+                    const serrMesh = new THREE.Mesh(serrGeo, serrMat);
+                    serrMesh.position.y = 1.4;
+                    serrMesh.castShadow = true;
+                    serrMesh.userData = {
+                        tooltipTitle: "1. Leading-Edge Comb Serrations",
+                        tooltipDesc: "Comb-like teeth along the leading edge generate tiny coaxial micro-vortices that energize the boundary layer and prevent chaotic flow separation at high angles of attack."
+                    };
+                    interactiveMeshes.push(serrMesh);
+                    bladeRoot.add(serrMesh);
+                }
+
+                // Trailing-Edge Compliant Fringe (-X side of blade chord)
+                if (state.fringeLength > 0) {
+                    const fringeGeo = buildTrailingFringeGeometry(
+                        L,
+                        Math.round(state.serrationCount * 1.4),
+                        (state.fringeLength / 100) * 0.68
+                    );
+                    const fringeMat = new THREE.MeshStandardMaterial({
+                        color: 0x06b6d4,
+                        roughness: 0.5,
+                        transparent: true,
+                        opacity: 0.9,
+                        side: THREE.DoubleSide
+                    });
+                    const fringeMesh = new THREE.Mesh(fringeGeo, fringeMat);
+                    fringeMesh.position.y = 1.4;
+                    fringeMesh.castShadow = true;
+                    fringeMesh.userData = {
+                        tooltipTitle: "2. Trailing-Edge Feather Fringe",
+                        tooltipDesc: "Flexible sawtooth fringes along the rear edge smoothly blend upper and lower airflows, eliminating the sharp acoustic impedance discontinuity that causes loud turbine whooshing."
+                    };
+                    interactiveMeshes.push(fringeMesh);
+                    bladeRoot.add(fringeMesh);
+                }
+            }
+
+            return bladeRoot;
+        }
+
+        /**
+         * Helper: Compute blade chord and twist angle at normalized span s in [0, 1]
+         */
+        function getBladeProfileAtSpan(s) {
+            const chord = CONFIG.BLADE_CHORD_ROOT * (1 - 0.68 * s);
+            const thickness = chord * 0.16;
+            const twist = (1 - s) * 0.26 + 0.08; // Radians of pitch twist
+            return { chord, thickness, twist };
+        }
+
+        function buildTwistedAirfoilGeometry(length, spanSteps) {
+            const profilePts = 16; // Points around airfoil perimeter
+            const positions = [];
+            const indices = [];
+
+            for (let i = 0; i <= spanSteps; i++) {
+                const s = i / spanSteps;
+                const y = s * length;
+                const { chord, thickness, twist } = getBladeProfileAtSpan(s);
+                const cosT = Math.cos(twist);
+                const sinT = Math.sin(twist);
+
+                for (let j = 0; j <= profilePts; j++) {
+                    const theta = (j / profilePts) * Math.PI * 2;
+                    // Airfoil local coordinates: Leading edge at +chord*0.5, Trailing edge at -chord*0.5
+                    const u = Math.cos(theta); // +1 at LE, -1 at TE
+                    const localX = u * (chord * 0.5);
+                    // Teardrop thickness distribution (thicker near LE, sharp at TE)
+                    const env = Math.pow(0.5 * (1 + u), 0.35);
+                    const localZ = Math.sin(theta) * thickness * env;
+
+                    // Apply spanwise twist around Y axis
+                    const rx = localX * cosT - localZ * sinT;
+                    const rz = localX * sinT + localZ * cosT;
+                    positions.push(rx, y, rz);
+                }
+            }
+
+            const ringSize = profilePts + 1;
+            for (let i = 0; i < spanSteps; i++) {
+                for (let j = 0; j < profilePts; j++) {
+                    const a = i * ringSize + j;
+                    const b = (i + 1) * ringSize + j;
+                    const c = (i + 1) * ringSize + (j + 1);
+                    const d = i * ringSize + (j + 1);
+                    indices.push(a, b, d);
+                    indices.push(b, c, d);
+                }
+            }
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geo.setIndex(indices);
+            geo.computeVertexNormals();
+            return geo;
+        }
+
+        function buildSerrationCombGeometry(length, toothCount, depth) {
+            const positions = [];
+            const startS = 0.14;
+            const endS = 0.96;
+            const stepS = (endS - startS) / toothCount;
+
+            for (let i = 0; i < toothCount; i++) {
+                const s0 = startS + i * stepS;
+                const s1 = s0 + stepS * 0.85;
+                const sMid = (s0 + s1) * 0.5;
+
+                const p0 = getBladeProfileAtSpan(s0);
+                const p1 = getBladeProfileAtSpan(s1);
+                const pM = getBladeProfileAtSpan(sMid);
+
+                // Base 1 on Leading Edge (+chord/2)
+                const x0 = (p0.chord * 0.48) * Math.cos(p0.twist);
+                const z0 = (p0.chord * 0.48) * Math.sin(p0.twist);
+                // Base 2 on Leading Edge
+                const x1 = (p1.chord * 0.48) * Math.cos(p1.twist);
+                const z1 = (p1.chord * 0.48) * Math.sin(p1.twist);
+                // Comb Tooth Tip protruding forward into incoming wind
+                const tipDist = (pM.chord * 0.5) + depth * (0.65 + 0.35 * sMid);
+                const xTip = tipDist * Math.cos(pM.twist);
+                const zTip = tipDist * Math.sin(pM.twist) + depth * 0.25;
+
+                positions.push(
+                    x0, s0 * length, z0,
+                    xTip, sMid * length, zTip,
+                    x1, s1 * length, z1
+                );
+            }
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geo.computeVertexNormals();
+            return geo;
+        }
+
+        function buildTrailingFringeGeometry(length, fringeCount, fringeLen) {
+            const positions = [];
+            const startS = 0.12;
+            const endS = 0.96;
+            const stepS = (endS - startS) / fringeCount;
+
+            for (let i = 0; i < fringeCount; i++) {
+                const s0 = startS + i * stepS;
+                const s1 = s0 + stepS * 0.9;
+                const sMid = (s0 + s1) * 0.5;
+
+                const p0 = getBladeProfileAtSpan(s0);
+                const p1 = getBladeProfileAtSpan(s1);
+                const pM = getBladeProfileAtSpan(sMid);
+
+                // Base 1 on Trailing Edge (-chord/2)
+                const x0 = (-p0.chord * 0.48) * Math.cos(p0.twist);
+                const z0 = (-p0.chord * 0.48) * Math.sin(p0.twist);
+                // Base 2 on Trailing Edge
+                const x1 = (-p1.chord * 0.48) * Math.cos(p1.twist);
+                const z1 = (-p1.chord * 0.48) * Math.sin(p1.twist);
+                // Fringe Tip extending backward from trailing edge
+                const tipDist = (-pM.chord * 0.5) - fringeLen * (1.0 - 0.3 * sMid);
+                const xTip = tipDist * Math.cos(pM.twist);
+                const zTip = tipDist * Math.sin(pM.twist) - fringeLen * 0.18;
+
+                positions.push(
+                    x0, s0 * length, z0,
+                    x1, s1 * length, z1,
+                    xTip, sMid * length, zTip
+                );
+            }
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geo.computeVertexNormals();
+            return geo;
+        }
+
+        /**************************************************************************
+         * 4. AIRFLOW STREAMLINES, WAKE VORTEX RINGS & HEAT-MAP SLICE
+         **************************************************************************/
+        function createAirflowParticles() {
+            particleSystem = buildStreamlineSystem(0);
+            scene.add(particleSystem.mesh);
+        }
+
+        function buildStreamlineSystem(centerX) {
+            const count = CONFIG.PARTICLE_COUNT;
+            // Each particle is a clean velocity-aligned streak (2 vertices = 1 line segment)
+            const positions = new Float32Array(count * 6);
+            const colors = new Float32Array(count * 6);
+            const particleData = [];
+
+            for (let i = 0; i < count; i++) {
+                // Distribute particles in structured radial bands so flow looks organized and uncongested
+                const ringFraction = ((i % 8) + 0.35 + Math.random() * 0.3) / 8;
+                const r = ringFraction * (CONFIG.BLADE_LENGTH * 1.12);
+                const theta = (i * 2.39996) + (Math.random() - 0.5) * 0.15; // Golden-angle spiral spacing
+                const z = CONFIG.STREAM_Z_END + (i / count) * (CONFIG.STREAM_Z_START - CONFIG.STREAM_Z_END);
+
+                particleData.push({
+                    baseR: r,
+                    theta: theta,
+                    z: z,
+                    phase: (i % 12) * 0.52,
+                    speedOffset: 0.94 + Math.random() * 0.12
+                });
+            }
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const mat = new THREE.LineBasicMaterial({
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.92
+            });
+
+            const mesh = new THREE.LineSegments(geo, mat);
+            return { mesh, particleData, centerX };
+        }
+
+        function updateStreamlineSystem(sys, isOwl, dt) {
+            if (!state.showStreamlines) return;
+
+            const posAttr = sys.mesh.geometry.attributes.position;
+            const colAttr = sys.mesh.geometry.attributes.color;
+            const posArr = posAttr.array;
+            const colArr = colAttr.array;
+
+            const hubY = CONFIG.TOWER_HEIGHT + 0.6;
+            const windV = Math.max(state.windSpeed, 0.4);
+            const owlMitigation = isOwl ? getOwlEfficiencyFactor() : 0.0;
+
+            for (let i = 0; i < sys.particleData.length; i++) {
+                const p = sys.particleData[i];
+                p.z -= windV * 1.35 * p.speedOffset * dt;
+
+                // Respawn upwind while keeping structured radial spacing
+                if (p.z < CONFIG.STREAM_Z_END) {
+                    p.z = CONFIG.STREAM_Z_START;
+                    const ringFraction = ((i % 8) + 0.35 + Math.random() * 0.3) / 8;
+                    p.baseR = ringFraction * (CONFIG.BLADE_LENGTH * 1.12);
+                    p.theta = (i * 2.39996) + (Math.random() - 0.5) * 0.15;
+                }
+
+                let r = p.baseR;
+                let turbIntensity = 0.05; // Upwind smooth laminar flow (Blue)
+                let swirlRate = 0;
+                let jitterX = 0;
+                let jitterY = 0;
+
+                // Downstream of Rotor Plane (z < 1.8)
+                if (p.z < 1.8) {
+                    const distDownwind = 1.8 - p.z;
+                    const tipProximity = Math.exp(-Math.pow((p.baseR - CONFIG.BLADE_LENGTH * 0.85) / 3.8, 2));
+
+                    if (!isOwl) {
+                        // Conventional Turbine A: Heavy wake expansion, chaotic swirl & high turbulence
+                        swirlRate = (windV * 0.16) * (0.4 + 0.8 * tipProximity);
+                        p.theta -= swirlRate * dt;
+                        r = p.baseR + Math.sin(distDownwind * 0.45 + p.phase) * 1.45 * (distDownwind / 25);
+                        jitterX = Math.cos(distDownwind * 0.85 + p.phase) * 0.75;
+                        jitterY = Math.sin(distDownwind * 1.05 + p.phase) * 0.75;
+                        turbIntensity = Math.min(1.0, (windV / 18) * (0.55 + 0.55 * tipProximity));
+                    } else {
+                        // Owl-Inspired Turbine B: Coherent organized wake, suppressed vortex shedding
+                        const resid = 1.0 - 0.68 * owlMitigation;
+                        swirlRate = (windV * 0.16 * resid) * (0.3 + 0.5 * tipProximity);
+                        p.theta -= swirlRate * dt;
+                        r = p.baseR + Math.sin(distDownwind * 0.25 + p.phase) * (0.55 * resid) * (distDownwind / 25);
+                        jitterX = Math.cos(distDownwind * 0.45 + p.phase) * 0.25 * resid;
+                        jitterY = Math.sin(distDownwind * 0.45 + p.phase) * 0.25 * resid;
+                        turbIntensity = Math.min(1.0, (windV / 18) * (0.52 * resid + 0.12));
+                    }
+                }
+
+                const x = sys.centerX + r * Math.cos(p.theta) + jitterX;
+                const y = Math.max(0.8, hubY + r * Math.sin(p.theta) + jitterY);
+                const z = p.z;
+
+                // Longer, clearer streak tail vector so individual streamlines stand out cleanly
+                const streakLen = Math.max(1.6, windV * 0.24);
+                const tailAngle = p.theta + swirlRate * 0.12;
+                const tx = sys.centerX + r * Math.cos(tailAngle) + jitterX * 0.75;
+                const ty = Math.max(0.8, hubY + r * Math.sin(tailAngle) + jitterY * 0.75);
+                const tz = z + streakLen;
+
+                const idx = i * 6;
+                posArr[idx] = x;
+                posArr[idx + 1] = y;
+                posArr[idx + 2] = z;
+                posArr[idx + 3] = tx;
+                posArr[idx + 4] = ty;
+                posArr[idx + 5] = tz;
+
+                // Color-code by turbulence intensity: Sky Blue (0.0) -> Amber (0.5) -> Red (1.0)
+                const c = getTurbulenceColor(turbIntensity);
+                colArr[idx] = c.r;
+                colArr[idx + 1] = c.g;
+                colArr[idx + 2] = c.b;
+                colArr[idx + 3] = c.r * 0.65;
+                colArr[idx + 4] = c.g * 0.65;
+                colArr[idx + 5] = c.b * 0.65;
+            }
+
+            posAttr.needsUpdate = true;
+            colAttr.needsUpdate = true;
+        }
+
+        function getTurbulenceColor(t) {
+            // Smooth interpolation: 0=Blue(0x38bdf8), 0.5=Amber(0xfbbf24), 1.0=Red(0xf43f5e)
+            if (t < 0.5) {
+                const k = t * 2.0;
+                return {
+                    r: 0.22 + k * (0.98 - 0.22),
+                    g: 0.74 + k * (0.75 - 0.74),
+                    b: 0.97 + k * (0.14 - 0.97)
+                };
+            } else {
+                const k = (t - 0.5) * 2.0;
+                return {
+                    r: 0.98 + k * (0.96 - 0.98),
+                    g: 0.75 + k * (0.25 - 0.75),
+                    b: 0.14 + k * (0.37 - 0.14)
+                };
+            }
+        }
+
+        function createVortexRings() {
+            vortexGroup = buildVortexRingSet(0, state.isOwlMode);
+            scene.add(vortexGroup);
+        }
+
+        function buildVortexRingSet(centerX, isOwl) {
+            const group = new THREE.Group();
+            group.position.set(centerX, CONFIG.TOWER_HEIGHT + 0.6, 1.5);
+
+            for (let i = 0; i < CONFIG.VORTEX_RINGS; i++) {
+                const ringGeo = new THREE.TorusGeometry(CONFIG.BLADE_LENGTH * 0.95, 0.14, 10, 44);
+                const ringMat = new THREE.MeshBasicMaterial({
+                    color: isOwl ? 0x10b981 : 0xf43f5e,
+                    transparent: true,
+                    opacity: 0.35
+                });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.userData = { offsetIndex: i / CONFIG.VORTEX_RINGS };
+                group.add(ring);
+            }
+            return group;
+        }
+
+        function updateVortexRings(time) {
+            if (!state.showVortices) return;
+            const speedFactor = state.windSpeed / 12.0;
+            const owlMitigation = getOwlEfficiencyFactor();
+            const isOwl = state.isOwlMode;
+            const resid = isOwl ? (1.0 - 0.65 * owlMitigation) : 1.0;
+
+            vortexGroup.children.forEach((ring, idx) => {
+                const progress = (ring.userData.offsetIndex + time * 0.22 * speedFactor) % 1.0;
+                ring.position.z = -progress * 36;
+                ring.material.color.setHex(isOwl ? 0x10b981 : 0xf43f5e);
+
+                if (!isOwl) {
+                    // Chaotic wobble behind conventional smooth blades
+                    ring.position.x = Math.sin(time * 3.5 + idx) * progress * 1.8 * speedFactor;
+                    ring.position.y = Math.cos(time * 2.8 + idx) * progress * 1.8 * speedFactor;
+                    ring.scale.setScalar(1.0 + progress * 0.38);
+                    ring.material.opacity = (1.0 - progress) * Math.min(0.55, state.windSpeed * 0.035);
+                } else {
+                    // Smooth, damped wake behind Owl-Inspired blades
+                    ring.position.x = Math.sin(time * 1.8 + idx) * progress * 0.45 * resid * speedFactor;
+                    ring.position.y = Math.cos(time * 1.8 + idx) * progress * 0.45 * resid * speedFactor;
+                    ring.scale.setScalar(1.0 + progress * 0.14 * resid);
+                    ring.material.opacity = (1.0 - progress) * Math.min(0.35, state.windSpeed * 0.022 * resid);
+                }
+            });
+        }
+
+        function createWakeHeatmaps() {
+            const hm = buildHeatmapPlane(0);
+            heatmapMesh = hm.mesh;
+            heatmapCtx = hm.ctx;
+            heatmapTex = hm.tex;
+            scene.add(heatmapMesh);
+
+            updateWakeHeatmaps(0);
+        }
+
+        function buildHeatmapPlane(centerX) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            const tex = new THREE.CanvasTexture(canvas);
+
+            const geo = new THREE.PlaneGeometry(28, 28);
+            const mat = new THREE.MeshBasicMaterial({
+                map: tex,
+                transparent: true,
+                opacity: 0.72,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(centerX, CONFIG.TOWER_HEIGHT + 0.6, -16);
+            return { mesh, ctx, tex };
+        }
+
+        function updateWakeHeatmaps(time) {
+            if (!state.showHeatmap) return;
+            drawHeatmapSlice(heatmapCtx, heatmapTex, state.isOwlMode, time);
+        }
+
+        function drawHeatmapSlice(ctx, tex, isOwl, time) {
+            ctx.clearRect(0, 0, 128, 128);
+            const cx = 64 + Math.sin(time * (isOwl ? 1.2 : 3.2)) * (isOwl ? 1.5 : 4.5);
+            const cy = 64 + Math.cos(time * (isOwl ? 1.2 : 2.9)) * (isOwl ? 1.5 : 4.5);
+
+            const intensity = Math.min(1.0, state.windSpeed / 20);
+            const owlMitigation = isOwl ? getOwlEfficiencyFactor() : 0;
+            const effectiveTurb = intensity * (1.0 - 0.58 * owlMitigation);
+
+            const grad = ctx.createRadialGradient(cx, cy, 6, cx, cy, 56);
+            if (!isOwl) {
+                grad.addColorStop(0, `rgba(244, 63, 94, ${0.75 * effectiveTurb})`);
+                grad.addColorStop(0.55, `rgba(251, 191, 36, ${0.65 * effectiveTurb})`);
+                grad.addColorStop(0.85, `rgba(56, 189, 248, ${0.3 * effectiveTurb})`);
+                grad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+            } else {
+                grad.addColorStop(0, `rgba(16, 185, 129, ${0.55 * effectiveTurb})`);
+                grad.addColorStop(0.55, `rgba(56, 189, 248, ${0.45 * effectiveTurb})`);
+                grad.addColorStop(0.85, `rgba(14, 165, 233, ${0.2 * effectiveTurb})`);
+                grad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+            }
+
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 128, 128);
+
+            // Draw subtle ring boundary
+            ctx.strokeStyle = isOwl ? 'rgba(16, 185, 129, 0.45)' : 'rgba(244, 63, 94, 0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(64, 64, 48, 0, Math.PI * 2);
+            ctx.stroke();
+
+            tex.needsUpdate = true;
+        }
+
+        /**************************************************************************
+         * 5. AEROACOUSTIC PHYSICS & BIOMIMETIC MODEL CALCULATIONS
+         **************************************************************************/
+        function getOwlEfficiencyFactor() {
+            // Combines serration depth, tooth count optimality (peak around 18-22), fringe length, and velvet surface
+            const depthScore = state.serrationDepth / 100;
+            const countOptimality = 1.0 - Math.abs(state.serrationCount - 20) / 26;
+            const fringeScore = state.fringeLength / 100;
+            const velvetBonus = state.velvetSurface ? 0.15 : 0.0;
+
+            return Math.min(1.0, (depthScore * 0.42 * countOptimality) + (fringeScore * 0.43) + velvetBonus);
+        }
+
+        function computePhysicsMetrics(windSpeed) {
+            const v = Math.max(windSpeed, 0.1);
+            // Tip Speed Ratio (TSR ~ 7 for 3 blades, adjusted slightly by blade count)
+            const tsr = 7.2 - (state.bladeCount - 3) * 0.65;
+            const tipSpeed = Math.max(v * tsr, 2.0);
+            const rpm = (v < 0.3) ? 0 : (tipSpeed * 60) / (2 * Math.PI * CONFIG.BLADE_LENGTH);
+
+            // Lighthill's 5th Power Aeroacoustic Scaling Law: L_p ~ 50 * log10(V_tip) + 10 * log10(B)
+            let splA = 35.0;
+            if (v > 0.5) {
+                splA = 50 * Math.log10(tipSpeed) + 10 * Math.log10(state.bladeCount) + 1.8;
+            }
+            splA = Math.max(35, Math.min(118, splA));
+
+            // Owl Noise Reduction (3 to 10.2 dB depending on slider settings and wind speed)
+            const owlFactor = getOwlEfficiencyFactor();
+            const speedScale = Math.min(1.0, v / 10.0);
+            const dbReduction = owlFactor * 9.6 * speedScale;
+            const splB = Math.max(34, splA - dbReduction);
+
+            // Wake Turbulence Intensity (%)
+            const baseTurbA = 5.5 + (v / 25) * 26.5 + (state.bladeCount - 3) * 1.8;
+            const turbReductionRatio = owlFactor * 0.46; // Up to 46% wake turbulence reduction
+            const baseTurbB = baseTurbA * (1.0 - turbReductionRatio);
+
+            // Electrical Power Output (kW) - Cubic up to rated speed, with minor aero drag tradeoff
+            let kwA = 0;
+            if (v >= CONFIG.CUT_IN_SPEED) {
+                const rawKw = 0.82 * Math.pow(v, 3) * (1 + (state.bladeCount - 3) * 0.025);
+                kwA = Math.min(CONFIG.RATED_POWER_KW, rawKw);
+            }
+            // Serrations & fringes have a tiny 0.5% - 1.8% parasitic drag trade-off at high depth,
+            // or slight lift improvement at moderate depth
+            const dragPenalty = ((state.serrationDepth / 100) * 0.012 + (state.fringeLength / 100) * 0.008);
+            const kwB = kwA * (1.0 - dragPenalty);
+
+            return {
+                rpm,
+                splA,
+                splB,
+                dbReduction,
+                turbA: baseTurbA,
+                turbB: baseTurbB,
+                turbReductionPct: turbReductionRatio * 100,
+                kwA,
+                kwB,
+                owlFactor
+            };
+        }
+
+        /**************************************************************************
+         * 6. LIVE CHARTS (CHART.JS) INITIALIZATION & UPDATES
+         **************************************************************************/
+        let chartNoiseWind, chartTurbTime, chartSpectrum;
+        const windSpeedLabels = [2, 5, 8, 11, 14, 17, 20, 23, 25];
+        const freqBands = ['63', '125', '250', '500', '1k', '2k', '4k', '8k'];
+
+        function initCharts() {
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.font.family = "'Inter', sans-serif";
+            Chart.defaults.font.size = 10;
+
+            // 1. Noise Level (dB) vs Wind Speed Chart
+            const ctx1 = document.getElementById('chart-noise-wind').getContext('2d');
+            chartNoiseWind = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: windSpeedLabels.map(v => v + 'm/s'),
+                    datasets: [
+                        {
+                            label: 'Normal Wing (dB)',
+                            data: [],
+                            borderColor: '#f43f5e',
+                            backgroundColor: 'rgba(244, 63, 94, 0.15)',
+                            borderWidth: 1.5,
+                            borderDash: [5, 4],
+                            tension: 0.35,
+                            pointRadius: 2,
+                            fill: false
+                        },
+                        {
+                            label: 'Owl Wing (dB)',
+                            data: [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.18)',
+                            borderWidth: 2.5,
+                            borderDash: [],
+                            tension: 0.35,
+                            pointRadius: 3,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 250 },
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { min: 45, max: 118, grid: { color: 'rgba(148,163,184,0.12)' }, title: { display: true, text: 'Noise (dB)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            // 2. Wake Turbulence Intensity (%) vs Time Chart
+            const ctx2 = document.getElementById('chart-turb-time').getContext('2d');
+            const initLabels = Array.from({ length: 20 }, (_, i) => '');
+            chartTurbTime = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: initLabels,
+                    datasets: [
+                        {
+                            label: 'Normal Wing Wake %',
+                            data: Array(20).fill(24),
+                            borderColor: '#f43f5e',
+                            backgroundColor: 'rgba(244, 63, 94, 0.15)',
+                            borderWidth: 1.5,
+                            borderDash: [5, 4],
+                            tension: 0.3,
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Owl Wing Wake %',
+                            data: Array(20).fill(14),
+                            borderColor: '#06b6d4',
+                            backgroundColor: 'rgba(6, 182, 212, 0.18)',
+                            borderWidth: 2.5,
+                            borderDash: [],
+                            tension: 0.3,
+                            pointRadius: 0,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 0 },
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { min: 0, max: 40, grid: { color: 'rgba(148,163,184,0.12)' }, title: { display: true, text: 'Turb %' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            // 3. Frequency Spectrum (Hz vs dB) Chart
+            const ctx3 = document.getElementById('chart-spectrum').getContext('2d');
+            chartSpectrum = new Chart(ctx3, {
+                type: 'bar',
+                data: {
+                    labels: freqBands,
+                    datasets: [
+                        {
+                            label: 'Conventional (A)',
+                            data: [],
+                            backgroundColor: 'rgba(244, 63, 94, 0.8)',
+                            borderRadius: 3
+                        },
+                        {
+                            label: 'Owl-Inspired (B)',
+                            data: [],
+                            backgroundColor: 'rgba(16, 185, 129, 0.85)',
+                            borderRadius: 3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 200 },
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { min: 30, max: 105, grid: { color: 'rgba(148,163,184,0.12)' }, title: { display: true, text: 'dB' } },
+                        x: { grid: { display: false }, title: { display: true, text: 'Frequency (Hz)' } }
+                    }
+                }
+            });
+
+            refreshStaticCharts();
+        }
+
+        function refreshStaticCharts() {
+            // Update Graph 1: Noise vs Wind Speed curve across all wind speeds
+            const curveA = [];
+            const curveB = [];
+            windSpeedLabels.forEach(w => {
+                const m = computePhysicsMetrics(w);
+                curveA.push(Number(m.splA.toFixed(1)));
+                curveB.push(Number(m.splB.toFixed(1)));
+            });
+            chartNoiseWind.data.datasets[0].data = curveA;
+            chartNoiseWind.data.datasets[1].data = curveB;
+            chartNoiseWind.update();
+
+            // Update Graph 3: 1/3 Octave Frequency Spectrum at current wind speed
+            const cur = computePhysicsMetrics(state.windSpeed);
+            // Spectral shape peaking around 500 Hz - 1 kHz (trailing edge noise peak)
+            const shapeOffsets = [-16, -10, -5, -1, 0, -3, -8, -15];
+            // Owl features suppress mid-to-high frequencies (500 Hz - 8 kHz) strongest
+            const owlFreqWeights = [0.25, 0.4, 0.65, 0.95, 1.15, 1.25, 1.3, 1.25];
+
+            const specA = [];
+            const specB = [];
+            for (let i = 0; i < freqBands.length; i++) {
+                const jitter = (Math.random() - 0.5) * 0.6;
+                const valA = Math.max(32, cur.splA - 8 + shapeOffsets[i] + jitter);
+                const valB = Math.max(30, valA - cur.dbReduction * owlFreqWeights[i]);
+                specA.push(Number(valA.toFixed(1)));
+                specB.push(Number(valB.toFixed(1)));
+            }
+            chartSpectrum.data.datasets[0].data = specA;
+            chartSpectrum.data.datasets[1].data = specB;
+            chartSpectrum.update();
+        }
+
+        function pushLiveTelemetryTick() {
+            if (!state.isPlaying) return;
+
+            const m = computePhysicsMetrics(state.windSpeed);
+            // Add realistic micro-fluctuations
+            const jitterA = (Math.random() - 0.5) * 1.4;
+            const jitterB = (Math.random() - 0.5) * 0.7;
+
+            const liveSplA = m.splA + jitterA * 0.35;
+            const liveSplB = m.splB + jitterB * 0.25;
+            const liveTurbA = Math.max(2, m.turbA + jitterA);
+            const liveTurbB = Math.max(1.5, m.turbB + jitterB);
+
+            // Push to Graph 2 (Time Series)
+            chartTurbTime.data.datasets[0].data.shift();
+            chartTurbTime.data.datasets[0].data.push(Number(liveTurbA.toFixed(1)));
+            chartTurbTime.data.datasets[1].data.shift();
+            chartTurbTime.data.datasets[1].data.push(Number(liveTurbB.toFixed(1)));
+            chartTurbTime.update();
+
+            // Subtle spectrum flicker
+            refreshStaticCharts();
+
+            // Update DOM Readouts
+            const dbDiff = (liveSplB - liveSplA).toFixed(1);
+            const acousticEnergyDrop = Math.round((1 - Math.pow(10, -m.dbReduction / 10)) * 100);
+            document.getElementById('kpi-db-diff').textContent = `${dbDiff} dB`;
+            document.getElementById('kpi-acoustic-energy').textContent = `-${acousticEnergyDrop}% Acoustic Pwr`;
+            document.getElementById('kpi-turb-diff').textContent = `-${m.turbReductionPct.toFixed(1)}%`;
+
+            const activeTurbVal = state.isOwlMode ? liveTurbB : liveTurbA;
+            document.getElementById('kpi-active-turb').textContent = `Active: ${activeTurbVal.toFixed(1)}%`;
+
+            document.getElementById('kpi-kw-a').textContent = `${Math.round(m.kwA)} kW`;
+            document.getElementById('kpi-kw-b').textContent = `${Math.round(m.kwB)} kW`;
+            const kwDiffPct = m.kwA > 0 ? (((m.kwB - m.kwA) / m.kwA) * 100).toFixed(1) : '0.0';
+            document.getElementById('kpi-kw-tradeoff').textContent = `${kwDiffPct}% Aero Tradeoff`;
+
+            const activeSpl = state.isOwlMode ? liveSplB : liveSplA;
+            const readoutEl = document.getElementById('readout-db-live');
+            readoutEl.textContent = `Active (${state.isOwlMode ? 'Owl' : 'Norm'}): ${activeSpl.toFixed(1)} dB`;
+            readoutEl.className = `font-mono text-[10px] ${state.isOwlMode ? 'text-emerald-400' : 'text-rose-400'}`;
+
+            document.getElementById('readout-turb-live').textContent = `Norm: ${liveTurbA.toFixed(1)}% | Owl: ${liveTurbB.toFixed(1)}%`;
+            document.getElementById('rpm-readout').textContent = `${m.rpm.toFixed(1)} RPM`;
+            document.getElementById('owl-score-badge').textContent = `${Math.round(m.owlFactor * 100)}% Bio-Opt`;
+        }
+
+        /**************************************************************************
+         * 7. 2D INTERACTIVE AIRFOIL CROSS-SECTION CANVAS
+         **************************************************************************/
+        function draw2DAirfoilComparison(time) {
+            const canvas = document.getElementById('airfoil-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Highlight whichever airfoil mode is currently active on the 3D turbine
+            ctx.fillStyle = state.isOwlMode ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)';
+            ctx.fillRect(0, state.isOwlMode ? h / 2 : 0, w, h / 2);
+
+            // Divider line
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(0, h / 2);
+            ctx.lineTo(w, h / 2);
+            ctx.stroke();
+
+            // Draw Top Half: Conventional Airfoil (Flow Separation & Eddies)
+            drawSingle2DAirfoil(ctx, w, 34, false, time);
+
+            // Draw Bottom Half: Owl-Inspired Airfoil (Serrations, Fringe & Attached Flow)
+            drawSingle2DAirfoil(ctx, w, 102, true, time);
+        }
+
+        function drawSingle2DAirfoil(ctx, w, cy, isOwl, time) {
+            const speed = Math.max(state.windSpeed, 1) * 0.15;
+            const owlFactor = isOwl ? getOwlEfficiencyFactor() : 0;
+
+            // Labels
+            ctx.fillStyle = isOwl ? '#10b981' : '#f43f5e';
+            ctx.font = 'bold 9px Inter, sans-serif';
+            ctx.fillText(isOwl ? 'B: OWL SERRATED + FRINGE (Attached Flow)' : 'A: CONVENTIONAL SMOOTH (Separated Wake)', 8, cy - 22);
+
+            // Streamlines
+            for (let s = -1; s <= 1; s += 1) {
+                ctx.beginPath();
+                ctx.strokeStyle = isOwl
+                    ? 'rgba(56, 189, 248, 0.7)'
+                    : (s <= 0 ? 'rgba(244, 63, 94, 0.75)' : 'rgba(56, 189, 248, 0.6)');
+                ctx.lineWidth = 1.3;
+
+                for (let x = 8; x < w - 8; x += 4) {
+                    let yOffset = s * 9;
+                    // Deflect around airfoil [x: 65 to 175]
+                    if (x > 55 && x < 180) {
+                        const normX = (x - 55) / 125;
+                        const camber = Math.sin(normX * Math.PI) * (s <= 0 ? -10 : 5);
+                        yOffset += camber;
+                    }
+                    // Downstream wake [x >= 165]
+                    if (x >= 165) {
+                        const wakeX = x - 165;
+                        const amp = isOwl ? (2.2 * (1.0 - 0.65 * owlFactor)) : 8.5;
+                        const freq = isOwl ? 0.12 : 0.24;
+                        yOffset += Math.sin(wakeX * freq - time * speed * 4 + s) * amp * (wakeX / 85);
+                    }
+                    if (x === 8) ctx.moveTo(x, cy + yOffset);
+                    else ctx.lineTo(x, cy + yOffset);
+                }
+                ctx.stroke();
+            }
+
+            // Airfoil Silhouette [x: 70 to 170]
+            ctx.save();
+            ctx.translate(115, cy);
+            ctx.rotate(-0.12); // Angle of attack
+
+            // Leading-Edge Comb Teeth on Owl Airfoil
+            if (isOwl && state.serrationDepth > 5) {
+                const toothLen = (state.serrationDepth / 100) * 14;
+                ctx.fillStyle = '#10b981';
+                for (let t = -3; t <= 3; t += 2) {
+                    ctx.beginPath();
+                    ctx.moveTo(-42, t * 1.5 - 2);
+                    ctx.lineTo(-42 - toothLen, t * 1.5);
+                    ctx.lineTo(-42, t * 1.5 + 2);
+                    ctx.fill();
+                }
+            }
+
+            // Main Airfoil Shape
+            ctx.fillStyle = isOwl ? '#d1fae5' : '#e2e8f0';
+            ctx.beginPath();
+            ctx.moveTo(-45, 0);
+            ctx.bezierCurveTo(-45, -12, 5, -9, 50, 0);
+            ctx.bezierCurveTo(5, 4, -45, 7, -45, 0);
+            ctx.fill();
+
+            // Trailing-Edge Fringe on Owl Airfoil
+            if (isOwl && state.fringeLength > 5) {
+                const fLen = (state.fringeLength / 100) * 18;
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(48, 0);
+                ctx.lineTo(48 + fLen, 1.5);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        /**************************************************************************
+         * 8. WEB AUDIO API AEROACOUSTIC SYNTHESIZER
+         **************************************************************************/
+        let audioCtx = null;
+        let noiseNode = null;
+        let bandpassFilter = null;
+        let lowpassFilter = null;
+        let masterGain = null;
+        let whooshPhase = 0;
+
+        function initWebAudio() {
+            if (audioCtx) return;
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContextClass();
+
+            // Generate 3-second white/pink noise buffer
+            const bufferSize = audioCtx.sampleRate * 3;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            let b0 = 0, b1 = 0, b2 = 0;
+            for (let i = 0; i < bufferSize; i++) {
+                const white = Math.random() * 2 - 1;
+                b0 = 0.997 * b0 + white * 0.029;
+                b1 = 0.985 * b1 + white * 0.032;
+                b2 = 0.950 * b2 + white * 0.048;
+                data[i] = (b0 + b1 + b2 + white * 0.18) * 0.35;
+            }
+
+            noiseNode = audioCtx.createBufferSource();
+            noiseNode.buffer = buffer;
+            noiseNode.loop = true;
+
+            // Bandpass filter shapes the blade swish
+            bandpassFilter = audioCtx.createBiquadFilter();
+            bandpassFilter.type = 'bandpass';
+            bandpassFilter.frequency.value = 320;
+            bandpassFilter.Q.value = 1.8;
+
+            // Lowpass filter simulates high-frequency attenuation by owl serrations & velvet
+            lowpassFilter = audioCtx.createBiquadFilter();
+            lowpassFilter.type = 'lowpass';
+            lowpassFilter.frequency.value = 1800;
+
+            masterGain = audioCtx.createGain();
+            masterGain.gain.value = 0.0;
+
+            noiseNode.connect(bandpassFilter);
+            bandpassFilter.connect(lowpassFilter);
+            lowpassFilter.connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+
+            noiseNode.start();
+        }
+
+        function updateSynthAudio(dt) {
+            if (!state.audioEnabled || !audioCtx || state.audioMuted || !state.isPlaying) {
+                if (masterGain && audioCtx) {
+                    masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.08);
+                }
+                return;
+            }
+
+            const m = computePhysicsMetrics(state.windSpeed);
+            const bladePassFreq = (m.rpm / 60) * state.bladeCount; // Hz
+            whooshPhase += bladePassFreq * Math.PI * 2 * dt;
+
+            const isOwlTarget = state.isOwlMode;
+            const owlMitigation = isOwlTarget ? m.owlFactor : 0;
+
+            // Modulate filter cutoff and gain with blade passage swish
+            const swishMod = 0.5 + 0.5 * Math.sin(whooshPhase);
+            const baseCutoff = isOwlTarget
+                ? 180 + state.windSpeed * 14 * (1 - 0.45 * owlMitigation)
+                : 280 + state.windSpeed * 28;
+
+            bandpassFilter.frequency.setTargetAtTime(
+                baseCutoff + swishMod * (isOwlTarget ? 95 : 290),
+                audioCtx.currentTime,
+                0.04
+            );
+
+            lowpassFilter.frequency.setTargetAtTime(
+                isOwlTarget ? (900 - owlMitigation * 480) : 3200,
+                audioCtx.currentTime,
+                0.05
+            );
+
+            const windNorm = Math.min(1.0, state.windSpeed / 22);
+            const targetAmplitude = windNorm * state.audioVolume * (isOwlTarget ? (0.28 * (1 - 0.55 * owlMitigation)) : 0.65);
+            const modulatedGain = targetAmplitude * (0.65 + 0.35 * swishMod);
+
+            masterGain.gain.setTargetAtTime(modulatedGain, audioCtx.currentTime, 0.04);
+        }
+
+        /**************************************************************************
+         * 9. UI INTERACTION HANDLERS & CAMERA PRESETS
+         **************************************************************************/
+        function setTurbineMode(isOwl) {
+            state.isOwlMode = isOwl;
+
+            // Update Top Bar Switcher Buttons
+            const topNormal = document.getElementById('top-btn-normal');
+            const topOwl = document.getElementById('top-btn-owl');
+            // Update Side Panel Switcher Buttons
+            const sideNormal = document.getElementById('side-btn-normal');
+            const sideOwl = document.getElementById('side-btn-owl');
+            const sideBadge = document.getElementById('side-mode-badge');
+            const owlSlidersBox = document.getElementById('owl-sliders-box');
+
+            // Update Floating Status Pill & Audio Profile Label
+            const statusDot = document.getElementById('status-dot');
+            const statusLabel = document.getElementById('status-mode-label');
+            const audioProfileLabel = document.getElementById('audio-profile-label');
+
+            if (isOwl) {
+                topOwl.className = "px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-emerald-500 text-slate-950 shadow";
+                topNormal.className = "px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200";
+
+                sideOwl.className = "py-2 px-2 rounded-lg text-xs font-semibold border border-emerald-500 bg-emerald-500/20 text-emerald-300 transition flex items-center justify-center gap-1.5";
+                sideNormal.className = "py-2 px-2 rounded-lg text-xs font-medium border border-slate-500/30 bg-slate-500/10 opacity-75 transition flex items-center justify-center gap-1.5";
+
+                sideBadge.textContent = "Owl Wing";
+                sideBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400";
+                owlSlidersBox.classList.remove('opacity-40');
+
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse";
+                statusLabel.textContent = "Active: Owl Wing (Biomimetic Serrated & Fringed)";
+                statusLabel.className = "text-xs font-bold tracking-wide text-emerald-400 uppercase";
+
+                audioProfileLabel.textContent = "Owl Wing (Soft Whoosh)";
+                audioProfileLabel.className = "font-semibold text-emerald-400";
+            } else {
+                topNormal.className = "px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-rose-500 text-white shadow";
+                topOwl.className = "px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200";
+
+                sideNormal.className = "py-2 px-2 rounded-lg text-xs font-semibold border border-rose-500 bg-rose-500/20 text-rose-300 transition flex items-center justify-center gap-1.5";
+                sideOwl.className = "py-2 px-2 rounded-lg text-xs font-medium border border-slate-500/30 bg-slate-500/10 opacity-75 transition flex items-center justify-center gap-1.5";
+
+                sideBadge.textContent = "Normal Wing";
+                sideBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-400";
+                owlSlidersBox.classList.add('opacity-40');
+
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse";
+                statusLabel.textContent = "Active: Normal Wing (Conventional Smooth Blade)";
+                statusLabel.className = "text-xs font-bold tracking-wide text-rose-400 uppercase";
+
+                audioProfileLabel.textContent = "Normal Wing (Harsh Blade Swish)";
+                audioProfileLabel.className = "font-semibold text-rose-400";
+            }
+
+            if (chartNoiseWind && chartTurbTime && chartSpectrum) {
+                // Graph 1: Noise Level (dB) vs Wind Speed
+                chartNoiseWind.data.datasets[0].borderWidth = isOwl ? 1.5 : 2.5;
+                chartNoiseWind.data.datasets[0].borderDash = isOwl ? [5, 4] : [];
+                chartNoiseWind.data.datasets[0].fill = !isOwl;
+                chartNoiseWind.data.datasets[0].pointRadius = isOwl ? 2 : 3;
+
+                chartNoiseWind.data.datasets[1].borderWidth = isOwl ? 2.5 : 1.5;
+                chartNoiseWind.data.datasets[1].borderDash = isOwl ? [] : [5, 4];
+                chartNoiseWind.data.datasets[1].fill = isOwl;
+                chartNoiseWind.data.datasets[1].pointRadius = isOwl ? 3 : 2;
+                chartNoiseWind.update();
+
+                // Graph 2: Wake Turbulence Intensity (%) vs Time
+                chartTurbTime.data.datasets[0].borderWidth = isOwl ? 1.5 : 2.5;
+                chartTurbTime.data.datasets[0].borderDash = isOwl ? [5, 4] : [];
+                chartTurbTime.data.datasets[0].fill = !isOwl;
+
+                chartTurbTime.data.datasets[1].borderWidth = isOwl ? 2.5 : 1.5;
+                chartTurbTime.data.datasets[1].borderDash = isOwl ? [] : [5, 4];
+                chartTurbTime.data.datasets[1].fill = isOwl;
+                chartTurbTime.update();
+
+                // Graph 3: Broadband Frequency Spectrum
+                chartSpectrum.data.datasets[0].backgroundColor = isOwl ? 'rgba(244, 63, 94, 0.3)' : 'rgba(244, 63, 94, 0.9)';
+                chartSpectrum.data.datasets[1].backgroundColor = isOwl ? 'rgba(16, 185, 129, 0.9)' : 'rgba(16, 185, 129, 0.3)';
+                chartSpectrum.update();
+            }
+
+            rebuildRotorBlades();
+            draw2DAirfoilComparison(simElapsedTime);
+            pushLiveTelemetryTick();
+        }
+
+        function updateParameters(rebuildGeometry = false) {
+            state.windSpeed = parseFloat(document.getElementById('slider-wind').value);
+            state.serrationDepth = parseInt(document.getElementById('slider-serr-depth').value, 10);
+            state.serrationCount = parseInt(document.getElementById('slider-serr-count').value, 10);
+            state.fringeLength = parseInt(document.getElementById('slider-fringe').value, 10);
+            state.velvetSurface = document.getElementById('chk-velvet').checked;
+
+            document.getElementById('val-wind').textContent = state.windSpeed.toFixed(1);
+            document.getElementById('val-serr-depth').textContent = state.serrationDepth;
+            document.getElementById('val-serr-count').textContent = state.serrationCount;
+            document.getElementById('val-fringe').textContent = state.fringeLength;
+
+            if (rebuildGeometry) {
+                rebuildRotorBlades();
+            } else {
+                // Update velvet roughness material on central rotor
+                rotorHub.traverse(obj => {
+                    if (obj.isMesh && obj.userData.tooltipTitle && obj.userData.tooltipTitle.includes('Velvety')) {
+                        obj.material.roughness = state.velvetSurface ? 0.88 : 0.25;
+                        obj.material.color.setHex(state.velvetSurface ? 0xd1fae5 : 0xf8fafc);
+                    }
+                });
+            }
+
+            refreshStaticCharts();
+            pushLiveTelemetryTick();
+        }
+
+        function setBladeCount(count) {
+            state.bladeCount = count;
+            [2, 3, 4].forEach(n => {
+                const btn = document.getElementById(`blade-btn-${n}`);
+                if (n === count) {
+                    btn.className = "py-1.5 rounded-lg border border-emerald-500 bg-emerald-500/20 text-emerald-400 font-semibold transition";
+                } else {
+                    btn.className = "py-1.5 rounded-lg border border-slate-500/30 bg-slate-500/10 font-medium transition";
+                }
+            });
+            rebuildRotorBlades();
+            refreshStaticCharts();
+        }
+
+        function updateVisToggles() {
+            state.showStreamlines = document.getElementById('chk-streamlines').checked;
+            state.showVortices = document.getElementById('chk-vortices').checked;
+
+            particleSystem.mesh.visible = state.showStreamlines;
+            vortexGroup.visible = state.showVortices;
+        }
+
+        function togglePlayPause() {
+            state.isPlaying = !state.isPlaying;
+            const icon = document.getElementById('icon-playpause');
+            const text = document.getElementById('text-playpause');
+            const btn = document.getElementById('btn-playpause');
+
+            if (state.isPlaying) {
+                icon.className = 'fa-solid fa-pause';
+                text.textContent = 'Pause';
+                btn.className = 'flex-1 py-2 px-3 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow flex items-center justify-center gap-1.5 transition';
+            } else {
+                icon.className = 'fa-solid fa-play';
+                text.textContent = 'Play';
+                btn.className = 'flex-1 py-2 px-3 rounded-xl font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow flex items-center justify-center gap-1.5 transition';
+            }
+        }
+
+        function toggleSlowMo() {
+            state.isSlowMo = !state.isSlowMo;
+            const btn = document.getElementById('btn-slowmo');
+            if (state.isSlowMo) {
+                btn.className = 'py-2 px-3 rounded-xl font-semibold bg-cyan-500/25 text-cyan-300 border border-cyan-500 transition flex items-center gap-1.5';
+            } else {
+                btn.className = 'py-2 px-3 rounded-xl font-medium bg-slate-500/15 hover:bg-slate-500/25 border border-slate-500/30 transition flex items-center gap-1.5';
+            }
+        }
+
+        function resetSimulation() {
+            document.getElementById('slider-wind').value = 12;
+            document.getElementById('slider-serr-depth').value = 75;
+            document.getElementById('slider-serr-count').value = 18;
+            document.getElementById('slider-fringe').value = 80;
+            document.getElementById('chk-velvet').checked = true;
+            setBladeCount(3);
+            setTurbineMode(true);
+            updateParameters(true);
+            setCameraPreset('front');
+        }
+
+        // Camera Presets with Smooth Interpolation (Centered on the single turbine at X = 0)
+        let camAnimTarget = null;
+        function setCameraPreset(preset) {
+            if (preset === 'front') {
+                camAnimTarget = {
+                    pos: new THREE.Vector3(0, 22, 44),
+                    look: new THREE.Vector3(0, 20, 0)
+                };
+            } else if (preset === 'side') {
+                camAnimTarget = {
+                    pos: new THREE.Vector3(46, 22, -6),
+                    look: new THREE.Vector3(0, 20, -8)
+                };
+            } else if (preset === 'closeup') {
+                // Close-up inspection of the central turbine's top blade
+                camAnimTarget = {
+                    pos: new THREE.Vector3(2.4, CONFIG.TOWER_HEIGHT + 7.2, 7.5),
+                    look: new THREE.Vector3(0, CONFIG.TOWER_HEIGHT + 6.5, 1.8)
+                };
+            } else if (preset === 'top') {
+                camAnimTarget = {
+                    pos: new THREE.Vector3(0, 68, 6),
+                    look: new THREE.Vector3(0, 14, -8)
+                };
+            }
+        }
+
+        function toggleDayNight() {
+            state.isDay = !state.isDay;
+            updateDayNightVisuals();
+        }
+
+        function updateDayNightVisuals() {
+            const icon = document.getElementById('icon-daynight');
+            if (state.isDay) {
+                icon.className = 'fa-solid fa-sun text-amber-400';
+                skyMesh.material.uniforms.topColor.value.setHex(0x0284c7);
+                skyMesh.material.uniforms.bottomColor.value.setHex(0xe0f2fe);
+                groundMesh.material.color.setHex(0x1e293b);
+                dirLight.intensity = 1.15;
+                hemiLight.intensity = 0.55;
+            } else {
+                icon.className = 'fa-solid fa-cloud-moon text-indigo-400';
+                skyMesh.material.uniforms.topColor.value.setHex(0x020617);
+                skyMesh.material.uniforms.bottomColor.value.setHex(0x0f172a);
+                groundMesh.material.color.setHex(0x090d16);
+                dirLight.intensity = 0.35;
+                hemiLight.intensity = 0.2;
+            }
+        }
+
+        function toggleUITheme() {
+            state.darkUI = !state.darkUI;
+            const htmlEl = document.documentElement;
+            const icon = document.getElementById('icon-theme');
+            if (state.darkUI) {
+                htmlEl.classList.add('dark');
+                icon.className = 'fa-solid fa-moon text-sky-400';
+            } else {
+                htmlEl.classList.remove('dark');
+                icon.className = 'fa-solid fa-sun text-amber-500';
+            }
+        }
+
+        function toggleAudioMode() {
+            initWebAudio();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            state.audioEnabled = !state.audioEnabled;
+            const btn = document.getElementById('btn-sound');
+            if (state.audioEnabled) {
+                btn.innerHTML = '<i class="fa-solid fa-wave-square mr-1"></i>Active';
+                btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-500/25 text-amber-300 border border-amber-500 transition';
+            } else {
+                btn.innerHTML = '<i class="fa-solid fa-volume-xmark mr-1"></i>Off';
+                btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-500/20 hover:bg-amber-500/20 border border-slate-500/30 transition';
+            }
+        }
+
+        function toggleMute() {
+            state.audioMuted = !state.audioMuted;
+            const icon = document.getElementById('icon-mute');
+            icon.className = state.audioMuted ? 'fa-solid fa-volume-xmark text-rose-400' : 'fa-solid fa-volume-low';
+        }
+
+        function updateAudioVolume() {
+            const val = parseInt(document.getElementById('slider-volume').value, 10);
+            state.audioVolume = val / 100;
+            document.getElementById('val-volume').textContent = `${val}%`;
+        }
+
+        function toggleModal(id) {
+            const modal = document.getElementById(id);
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            } else {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
+
+        function toggleLeftPanel() {
+            state.leftMinimized = !state.leftMinimized;
+            const panel = document.getElementById('left-panel');
+            const restoreBtn = document.getElementById('restore-left-btn');
+            if (state.leftMinimized) {
+                panel.classList.add('-translate-x-[120%]');
+                restoreBtn.classList.remove('hidden');
+                restoreBtn.classList.add('flex');
+            } else {
+                panel.classList.remove('-translate-x-[120%]');
+                restoreBtn.classList.add('hidden');
+                restoreBtn.classList.remove('flex');
+            }
+        }
+
+        function toggleRightPanel() {
+            state.rightMinimized = !state.rightMinimized;
+            const panel = document.getElementById('right-panel');
+            const restoreBtn = document.getElementById('restore-right-btn');
+            if (state.rightMinimized) {
+                panel.classList.add('translate-x-[120%]');
+                restoreBtn.classList.remove('hidden');
+                restoreBtn.classList.add('flex');
+            } else {
+                panel.classList.remove('translate-x-[120%]');
+                restoreBtn.classList.add('hidden');
+                restoreBtn.classList.remove('flex');
+            }
+        }
+
+        /**
+         * Combines all three live telemetry charts + KPI header into a downloadable PNG report
+         */
+        function exportGraphsPNG() {
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = 760;
+            exportCanvas.height = 920;
+            const ctx = exportCanvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+            // Report Header
+            ctx.fillStyle = '#10b981';
+            ctx.font = 'bold 20px Inter, sans-serif';
+            ctx.fillText('AeroOwl 3D — Biomimetic Wind Turbine Telemetry Report', 30, 42);
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '13px Inter, sans-serif';
+            ctx.fillText(
+                `Wind: ${state.windSpeed} m/s | Blades: ${state.bladeCount} | Serration Depth: ${state.serrationDepth}% (${state.serrationCount} teeth) | Fringe: ${state.fringeLength}%`,
+                30,
+                68
+            );
+
+            // KPI Summary Box
+            const m = computePhysicsMetrics(state.windSpeed);
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(30, 84, 700, 52);
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 14px Inter, sans-serif';
+            ctx.fillText(
+                `Noise Reduction: -${m.dbReduction.toFixed(1)} dB   |   Wake Turbulence Reduction: -${m.turbReductionPct.toFixed(1)}%   |   Power B: ${Math.round(m.kwB)} kW`,
+                48,
+                115
+            );
+
+            // Draw the 3 Chart Canvases
+            const c1 = document.getElementById('chart-noise-wind');
+            const c2 = document.getElementById('chart-turb-time');
+            const c3 = document.getElementById('chart-spectrum');
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 14px Inter, sans-serif';
+            ctx.fillText('1. Noise Level (dB) vs. Wind Speed (m/s)', 30, 168);
+            ctx.drawImage(c1, 30, 180, 700, 210);
+
+            ctx.fillText('2. Wake Turbulence Intensity (%) vs. Time', 30, 425);
+            ctx.drawImage(c2, 30, 437, 700, 195);
+
+            ctx.fillText('3. 1/3 Octave Broadband Frequency Spectrum (Hz vs. dB)', 30, 665);
+            ctx.drawImage(c3, 30, 677, 700, 210);
+
+            const link = document.createElement('a');
+            link.download = `owl-turbine-telemetry-${Date.now()}.png`;
+            link.href = exportCanvas.toDataURL('image/png');
+            link.click();
+        }
+
+        /**************************************************************************
+         * 10. 3D RAYCASTER HOVER TOOLTIPS FOR BLADE FEATURES
+         **************************************************************************/
+        function onPointerMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, mainCamera);
+            const intersects = raycaster.intersectObjects(interactiveMeshes, false);
+            const tooltip = document.getElementById('blade-tooltip');
+
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                if (hit.userData && hit.userData.tooltipTitle) {
+                    document.getElementById('tooltip-title').textContent = hit.userData.tooltipTitle;
+                    document.getElementById('tooltip-desc').textContent = hit.userData.tooltipDesc;
+                    tooltip.style.left = `${Math.min(window.innerWidth - 290, event.clientX + 16)}px`;
+                    tooltip.style.top = `${Math.min(window.innerHeight - 130, event.clientY + 16)}px`;
+                    tooltip.classList.remove('opacity-0', 'translate-y-2');
+                    tooltip.classList.add('opacity-100', 'translate-y-0');
+                    return;
+                }
+            }
+            tooltip.classList.add('opacity-0', 'translate-y-2');
+            tooltip.classList.remove('opacity-100', 'translate-y-0');
+        }
+
+        function onWindowResize() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            mainCamera.aspect = w / h;
+            mainCamera.updateProjectionMatrix();
+
+            renderer.setSize(w, h);
+        }
+
+        /**************************************************************************
+         * 11. MAIN ANIMATION LOOP
+         **************************************************************************/
+        let lastTime = performance.now();
+        let simElapsedTime = 0;
+        let lastChartTick = 0;
+        let lastHeatmapTick = 0;
+
+        function animate(now) {
+            requestAnimationFrame(animate);
+
+            const rawDt = Math.min(0.05, (now - lastTime) / 1000);
+            lastTime = now;
+
+            const timeScale = state.isPlaying ? (state.isSlowMo ? 0.25 : 1.0) : 0.0;
+            const dt = rawDt * timeScale;
+            simElapsedTime += dt;
+
+            // Smooth Camera Preset Transition
+            if (camAnimTarget) {
+                mainCamera.position.lerp(camAnimTarget.pos, 0.08);
+                controls.target.lerp(camAnimTarget.look, 0.08);
+                if (mainCamera.position.distanceTo(camAnimTarget.pos) < 0.15) {
+                    camAnimTarget = null;
+                }
+            }
+            controls.update();
+
+            // Rotate Central Turbine Blades based on wind speed
+            if (state.isPlaying && state.windSpeed > 0.2) {
+                const m = computePhysicsMetrics(state.windSpeed);
+                const omega = (m.rpm * 2 * Math.PI) / 60; // rad/s
+                state.rotorAngle -= omega * dt;
+                rotorHub.rotation.z = state.rotorAngle;
+            }
+
+            // Update Streamline Particles & Helical Wake Vortices for active blade mode
+            if (state.isPlaying) {
+                updateStreamlineSystem(particleSystem, state.isOwlMode, dt);
+                updateVortexRings(simElapsedTime);
+            }
+
+            // Periodic Heatmap & 2D Airfoil Redraw
+            // Periodic 2D Airfoil Redraw
+            if (now - lastHeatmapTick > 60) {
+                draw2DAirfoilComparison(simElapsedTime);
+                lastHeatmapTick = now;
+            }
+
+            // Periodic Live Telemetry Chart Update (every 450ms)
+            if (now - lastChartTick > 450) {
+                pushLiveTelemetryTick();
+                lastChartTick = now;
+            }
+
+            // Update Web Audio Synth
+            updateSynthAudio(rawDt);
+
+            // Render Single Central Turbine Scene
+            renderer.render(scene, mainCamera);
+        }
+
+        // Start simulation on window load
+        window.onload = function () {
+            initThreeScene();
+            initCharts();
+            updateParameters(false);
+            animate(performance.now());
+        };
+    </script>
+</body>
+</html>
